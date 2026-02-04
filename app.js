@@ -116,6 +116,46 @@ function deleteDatabase() {
   };
 }
 
+function getAllMessages() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject("Failed to fetch messages");
+  });
+}
+
+// insight functions
+
+function getMessageCountPerPerson(messages) {
+  const counts = {};
+
+  for (const msg of messages) {
+    counts[msg.sender] = (counts[msg.sender] || 0) + 1;
+  }
+
+  return counts;
+}
+
+async function calculateMessageCounts() {
+  await openDB();
+  const messages = await getAllMessages();
+  return getMessageCountPerPerson(messages);
+}
+
+async function showMessageCounts() {
+  const counts = await calculateMessageCounts();
+
+  let output = "Message count per person:\n\n";
+  for (const person in counts) {
+    output += `${person}: ${counts[person]}\n`;
+  }
+
+  document.getElementById("status").textContent = output;
+}
+
 document.getElementById("fileInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -129,6 +169,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
 
   document.getElementById("status").textContent =
     `Stored ${messages.length} messages successfully.`;
+  showMessageCounts();
 });
 
 document.getElementById("deleteDbBtn").addEventListener("click", () => {
