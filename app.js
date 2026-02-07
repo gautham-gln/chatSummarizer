@@ -73,10 +73,31 @@ function formatDuration(ms) {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
 
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  if (days > 0) {
+    return `${days}d ${hours % 24}h`;
+  }
+
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  }
+
   return `${seconds}s`;
+}
+
+function formatDateTime(date) {
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function sortMessagesByTime(messages) {
@@ -227,6 +248,35 @@ function getAverageResponseTimePerPerson(messages) {
   return averages;
 }
 
+function getLongestInactivePeriod(messages) {
+  if (messages.length < 2) return null;
+
+  const sorted = sortMessagesByTime(messages);
+
+  let maxGapMs = 0;
+  let start = null;
+  let end = null;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prevTime = new Date(sorted[i - 1].timestamp);
+    const currTime = new Date(sorted[i].timestamp);
+
+    const gap = currTime - prevTime;
+
+    if (gap > maxGapMs) {
+      maxGapMs = gap;
+      start = prevTime;
+      end = currTime;
+    }
+  }
+
+  return {
+    durationMs: maxGapMs,
+    from: start,
+    to: end,
+  };
+}
+
 async function calculateMessageCounts() {
   await openDB();
   const messages = await getAllMessages();
@@ -261,6 +311,30 @@ async function showAverageResponseTime() {
   document.getElementById("status").textContent += output;
 }
 
+async function showLongestInactivePeriod() {
+  const result = await calculateLongestInactivePeriod();
+
+  if (!result) {
+    document.getElementById("status").textContent =
+      "Not enough messages to calculate inactivity.";
+    return;
+  }
+
+  const output =
+    `Longest inactive period:\n\n` +
+    `From: ${formatDateTime(result.from)}\n` +
+    `To:   ${formatDateTime(result.to)}\n` +
+    `Duration: ${formatDuration(result.durationMs)}`;
+
+  document.getElementById("status").textContent += output;
+}
+
+async function calculateLongestInactivePeriod() {
+  await openDB();
+  const messages = await getAllMessages();
+  return getLongestInactivePeriod(messages);
+}
+
 document.getElementById("fileInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -275,6 +349,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
 
   showMessageCounts();
   showAverageResponseTime();
+  showLongestInactivePeriod();
 });
 
 document
