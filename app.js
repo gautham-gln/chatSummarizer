@@ -4,6 +4,11 @@ const STORE_NAME = "messages";
 
 let db = null;
 
+if (sessionStorage.getItem("DELETE_DB_ON_LOAD") === "true") {
+  sessionStorage.removeItem("DELETE_DB_ON_LOAD");
+  indexedDB.deleteDatabase(DB_NAME);
+}
+
 function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -12,6 +17,12 @@ function openDB() {
 
     request.onsuccess = () => {
       db = request.result;
+
+      db.onversionchange = () => {
+        if (db != null) db.close();
+        db = null;
+      };
+
       resolve(db);
     };
 
@@ -31,6 +42,11 @@ function openDB() {
   });
 }
 
+function handleDeleteClick() {
+  sessionStorage.setItem("DELETE_DB_ON_LOAD", "true");
+  location.reload();
+}
+
 function cleanChatText(rawText) {
   return rawText
     .split("\n")
@@ -38,6 +54,35 @@ function cleanChatText(rawText) {
       (line) => !line.includes("Messages and calls are end-to-end encrypted"),
     )
     .join("\n");
+}
+
+function clearMessagesStore() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject("Failed to clear store");
+  });
+}
+
+//helpers
+
+function formatDuration(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  return `${seconds}s`;
+}
+
+function sortMessagesByTime(messages) {
+  return [...messages].sort(
+    (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
+  );
 }
 
 function parseWhatsAppChat(text) {
@@ -67,7 +112,6 @@ function parseWhatsAppChat(text) {
         length: message.trim().length,
       };
     } else if (currentMessage) {
-      // Multiline continuation
       currentMessage.message += "\n" + line;
       currentMessage.length = currentMessage.message.length;
     }
@@ -81,7 +125,6 @@ function parseWhatsAppChat(text) {
 }
 
 function parseWhatsAppDate(dateStr, timeStr) {
-  // date: DD/MM/YY
   const [day, month, year] = dateStr.split("/").map(Number);
   const fullYear = year < 50 ? 2000 + year : 1900 + year;
 
@@ -100,8 +143,37 @@ function saveMessages(messages) {
   });
 }
 
+function calculateResponseTimes(messages) {
+  const sorted = sortMessagesByTime(messages);
+
+  const stats = {};
+  let prev = null;
+
+  for (const msg of sorted) {
+    if (prev && prev.sender !== msg.sender) {
+      const diffMs = new Date(msg.timestamp) - new Date(prev.timestamp);
+
+      if (diffMs >= 0) {
+        if (!stats[msg.sender]) {
+          stats[msg.sender] = { totalMs: 0, count: 0 };
+        }
+
+        stats[msg.sender].totalMs += diffMs;
+        stats[msg.sender].count += 1;
+      }
+    }
+
+    prev = msg;
+  }
+
+  return stats;
+}
+
 function deleteDatabase() {
-  if (db) db.close();
+  if (db) {
+    db.close();
+    db = null;
+  }
 
   const request = indexedDB.deleteDatabase(DB_NAME);
 
@@ -113,6 +185,11 @@ function deleteDatabase() {
   request.onerror = () => {
     document.getElementById("status").textContent =
       "Failed to delete database.";
+  };
+
+  request.onblocked = () => {
+    document.getElementById("status").textContent =
+      "Database deletion blocked. Close other tabs using this app.";
   };
 }
 
@@ -139,6 +216,17 @@ function getMessageCountPerPerson(messages) {
   return counts;
 }
 
+function getAverageResponseTimePerPerson(messages) {
+  const stats = calculateResponseTimes(messages);
+  const averages = {};
+
+  for (const sender in stats) {
+    averages[sender] = stats[sender].totalMs / stats[sender].count;
+  }
+
+  return averages;
+}
+
 async function calculateMessageCounts() {
   await openDB();
   const messages = await getAllMessages();
@@ -153,7 +241,24 @@ async function showMessageCounts() {
     output += `${person}: ${counts[person]}\n`;
   }
 
-  document.getElementById("status").textContent = output;
+  document.getElementById("status").textContent += output;
+}
+
+async function calculateAverageResponseTime() {
+  await openDB();
+  const messages = await getAllMessages();
+  return getAverageResponseTimePerPerson(messages);
+}
+
+async function showAverageResponseTime() {
+  const averages = await calculateAverageResponseTime();
+
+  let output = "Average response time:\n\n";
+  for (const person in averages) {
+    output += `${person}: ${formatDuration(averages[person])}\n`;
+  }
+
+  document.getElementById("status").textContent += output;
 }
 
 document.getElementById("fileInput").addEventListener("change", async (e) => {
@@ -165,13 +270,13 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
   const messages = parseWhatsAppChat(cleanedText);
 
   await openDB();
+  await clearMessagesStore();
   await saveMessages(messages);
 
-  document.getElementById("status").textContent =
-    `Stored ${messages.length} messages successfully.`;
   showMessageCounts();
+  showAverageResponseTime();
 });
 
-document.getElementById("deleteDbBtn").addEventListener("click", () => {
-  deleteDatabase();
-});
+document
+  .getElementById("deleteDbBtn")
+  .addEventListener("click", handleDeleteClick);
