@@ -13,3 +13,33 @@ pre {
   background: #f5f5f5;
   padding: 10px;
 }
+
+#heatmap-container {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 60px repeat(24, 1fr);
+  gap: 4px;
+  font-size: 12px;
+}
+
+.heatmap-cell {
+  padding: 6px 4px;
+  text-align: center;
+  border-radius: 4px;
+  background: #eee;
+}
+
+.heatmap-day {
+  font-weight: bold;
+  text-align: right;
+  padding-right: 6px;
+}
+
+.heatmap-hour {
+  font-weight: bold;
+  background: #ddd;
+}

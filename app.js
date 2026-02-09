@@ -1,6 +1,8 @@
 const DB_NAME = "ChatInsightsDB";
 const DB_VERSION = 1;
 const STORE_NAME = "messages";
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 let db = null;
 
@@ -67,6 +69,81 @@ function clearMessagesStore() {
   });
 }
 
+function createEmptyHeatmap() {
+  const heatmap = {};
+
+  for (const day of DAYS) {
+    heatmap[day] = {};
+    for (const hour of HOURS) {
+      heatmap[day][hour] = 0;
+    }
+  }
+
+  return heatmap;
+}
+
+function getHeatmapColor(value, max) {
+  if (value === 0) return "#f2f2f2";
+
+  const intensity = value / max; // 0 → 1
+  const alpha = Math.min(0.85, intensity);
+
+  return `rgba(33, 150, 243, ${alpha})`; // blue scale
+}
+
+function renderHeatmap(heatmap, containerId = "heatmap-container") {
+  const container = document.getElementById(containerId);
+  container.innerHTML = "";
+
+  let max = 0;
+  for (const day in heatmap) {
+    for (const hour in heatmap[day]) {
+      max = Math.max(max, heatmap[day][hour]);
+    }
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "heatmap-grid";
+
+  grid.appendChild(document.createElement("div"));
+
+  for (let h = 0; h < 24; h++) {
+    const hourCell = document.createElement("div");
+    hourCell.className = "heatmap-cell heatmap-hour";
+    hourCell.textContent = h;
+    grid.appendChild(hourCell);
+  }
+
+  for (const day of Object.keys(heatmap)) {
+    const dayCell = document.createElement("div");
+    dayCell.className = "heatmap-cell heatmap-day";
+    dayCell.textContent = day;
+    grid.appendChild(dayCell);
+
+    for (let h = 0; h < 24; h++) {
+      const value = heatmap[day][h];
+
+      const cell = document.createElement("div");
+      cell.className = "heatmap-cell";
+      cell.textContent = value > 0 ? value : "";
+
+      cell.style.backgroundColor = getHeatmapColor(value, max);
+      cell.title = `${day}, ${h}:00 → ${value} messages`;
+
+      grid.appendChild(cell);
+    }
+  }
+
+  container.appendChild(grid);
+}
+
+function toDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 //helpers
 
 function formatDuration(ms) {
@@ -104,6 +181,47 @@ function sortMessagesByTime(messages) {
   return [...messages].sort(
     (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
   );
+}
+
+function buildMessageHeatmap(messages) {
+  const heatmap = createEmptyHeatmap();
+
+  for (const msg of messages) {
+    const date = msg.timestamp;
+
+    const day = DAYS[date.getDay()];
+    const hour = date.getHours();
+
+    heatmap[day][hour]++;
+  }
+
+  return heatmap;
+}
+
+function extractEmojis(text) {
+  if (!text) return [];
+
+  const emojiRegex = /\p{Extended_Pictographic}/gu;
+  return text.match(emojiRegex) || [];
+}
+
+function getEmojiUsagePerPerson(messages) {
+  const usage = {};
+
+  for (const msg of messages) {
+    const emojis = extractEmojis(msg.message);
+    if (emojis.length === 0) continue;
+
+    if (!usage[msg.sender]) {
+      usage[msg.sender] = {};
+    }
+
+    for (const emoji of emojis) {
+      usage[msg.sender][emoji] = (usage[msg.sender][emoji] || 0) + 1;
+    }
+  }
+
+  return usage;
 }
 
 function parseWhatsAppChat(text) {
@@ -334,11 +452,9 @@ function getLongestMonologue(messages, minHours = 3) {
     const msgTime = new Date(msg.timestamp);
 
     if (msg.sender === currentSender) {
-      // continue monologue
       lastTime = msgTime;
       count++;
     } else {
-      // sender changed → evaluate previous monologue
       const duration = lastTime - startTime;
 
       if (duration >= minDurationMs) {
@@ -353,7 +469,6 @@ function getLongestMonologue(messages, minHours = 3) {
         }
       }
 
-      // reset for new sender
       currentSender = msg.sender;
       startTime = msgTime;
       lastTime = msgTime;
@@ -361,7 +476,6 @@ function getLongestMonologue(messages, minHours = 3) {
     }
   }
 
-  // final monologue check
   const finalDuration = lastTime - startTime;
   if (finalDuration >= minDurationMs) {
     if (!longest || finalDuration > longest.durationMs) {
@@ -409,6 +523,145 @@ function getMostActiveTimePeriod(messages) {
     messageCount: maxCount,
     distribution: buckets,
   };
+}
+
+function getEmojiUsagePerPerson(messages) {
+  const usage = {};
+
+  for (const msg of messages) {
+    const emojis = extractEmojis(msg.message);
+    if (emojis.length === 0) continue;
+
+    if (!usage[msg.sender]) {
+      usage[msg.sender] = {};
+    }
+
+    for (const emoji of emojis) {
+      usage[msg.sender][emoji] = (usage[msg.sender][emoji] || 0) + 1;
+    }
+  }
+
+  return usage;
+}
+
+function getMostUsedEmojiPerPerson(messages) {
+  const usage = getEmojiUsagePerPerson(messages);
+  const result = {};
+
+  for (const sender in usage) {
+    let maxCount = 0;
+    let topEmoji = null;
+
+    for (const emoji in usage[sender]) {
+      if (usage[sender][emoji] > maxCount) {
+        maxCount = usage[sender][emoji];
+        topEmoji = emoji;
+      }
+    }
+
+    result[sender] = {
+      emoji: topEmoji,
+      count: maxCount,
+    };
+  }
+
+  return result;
+}
+
+function buildMessageHeatmapPerPerson(messages) {
+  const result = {};
+
+  for (const msg of messages) {
+    const sender = msg.sender;
+
+    if (!result[sender]) {
+      result[sender] = createEmptyHeatmap();
+    }
+
+    const day = DAYS[msg.timestamp.getDay()];
+    const hour = msg.timestamp.getHours();
+
+    result[sender][day][hour]++;
+  }
+
+  return result;
+}
+
+function findPeakHeatmapCell(heatmap) {
+  let max = 0;
+  let peak = null;
+
+  for (const day in heatmap) {
+    for (const hour in heatmap[day]) {
+      const count = heatmap[day][hour];
+
+      if (count > max) {
+        max = count;
+        peak = { day, hour: Number(hour), count };
+      }
+    }
+  }
+
+  return peak;
+}
+
+function getCurrentMessageStreak(messages) {
+  if (!messages || messages.length === 0) {
+    return {
+      length: 0,
+      from: null,
+      to: null,
+    };
+  }
+
+  const daySet = new Set();
+  for (const msg of messages) {
+    daySet.add(toDateKey(msg.timestamp));
+  }
+
+  const days = Array.from(daySet).sort();
+
+  let streakLength = 1;
+  let streakEnd = days[days.length - 1];
+  let streakStart = streakEnd;
+
+  for (let i = days.length - 2; i >= 0; i--) {
+    const curr = new Date(days[i]);
+    const next = new Date(days[i + 1]);
+
+    const diff = (next - curr) / (1000 * 60 * 60 * 24);
+
+    if (diff === 1) {
+      streakLength++;
+      streakStart = days[i];
+    } else {
+      break;
+    }
+  }
+
+  return {
+    length: streakLength,
+    from: streakStart,
+    to: streakEnd,
+  };
+}
+
+function getCurrentMessageStreakPerPerson(messages) {
+  const grouped = {};
+
+  for (const msg of messages) {
+    if (!grouped[msg.sender]) {
+      grouped[msg.sender] = [];
+    }
+    grouped[msg.sender].push(msg);
+  }
+
+  const result = {};
+  for (const sender in grouped) {
+    result[sender] = getCurrentMessageStreak(grouped[sender]);
+  }
+
+  return result;
 }
 
 //async
@@ -536,6 +789,94 @@ async function showMostActiveTimePeriod() {
   document.getElementById("status").textContent += output;
 }
 
+async function calculateMostUsedEmojiPerPerson() {
+  await openDB();
+  const messages = await getAllMessages();
+  return getMostUsedEmojiPerPerson(messages);
+}
+
+async function showMostUsedEmojiPerPerson() {
+  const result = await calculateMostUsedEmojiPerPerson();
+
+  let output = "\n\nMost Used Emoji Per Person:\n\n";
+
+  for (const person in result) {
+    const { emoji, count } = result[person];
+    output += `${person}: ${emoji || "None"} (${count || 0})\n`;
+  }
+
+  document.getElementById("status").textContent += output;
+}
+
+function getLongestMessageStreak(messages) {
+  if (!messages.length) return null;
+
+  const daySet = new Set();
+  for (const msg of messages) {
+    daySet.add(toDateKey(msg.timestamp));
+  }
+
+  const days = Array.from(daySet).sort();
+
+  let longest = { length: 1, start: days[0], end: days[0] };
+  let currentStart = days[0];
+  let currentLength = 1;
+
+  for (let i = 1; i < days.length; i++) {
+    const prev = new Date(days[i - 1]);
+    const curr = new Date(days[i]);
+
+    const diffDays = (curr - prev) / (1000 * 60 * 60 * 24);
+
+    if (diffDays === 1) {
+      currentLength++;
+    } else {
+      if (currentLength > longest.length) {
+        longest = {
+          length: currentLength,
+          start: currentStart,
+          end: days[i - 1],
+        };
+      }
+      currentStart = days[i];
+      currentLength = 1;
+    }
+  }
+
+  if (currentLength > longest.length) {
+    longest = {
+      length: currentLength,
+      start: currentStart,
+      end: days[days.length - 1],
+    };
+  }
+
+  return longest;
+}
+
+function showLongestStreak(messages) {
+  const res = getLongestMessageStreak(messages);
+
+  let op = "\n\nLongest Streak:\n\n";
+  op += `${res.length} days (${res.start} → ${res.end})`;
+
+  const status = document.getElementById("status");
+  status.textContent += op;
+
+  console.log(op);
+}
+
+function showCurrentStreak(messages) {
+  const res = getCurrentMessageStreak(messages);
+
+  const status = document.getElementById("status");
+  status.textContent += `
+
+Current Streak:
+${res.length} days (${res.from} → ${res.to})
+`;
+}
+
 document.getElementById("fileInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -554,6 +895,11 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
   showDayVsNightRatio();
   showLongestMonologue();
   showMostActiveTimePeriod();
+  await showMostUsedEmojiPerPerson();
+  showLongestStreak(messages);
+  showCurrentStreak(messages);
+  const heatmap = buildMessageHeatmap(messages);
+  renderHeatmap(heatmap);
 });
 
 document
