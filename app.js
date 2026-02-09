@@ -225,6 +225,12 @@ function getAllMessages() {
   });
 }
 
+function getHourBucketLabel(hour) {
+  const start = hour.toString().padStart(2, "0");
+  const end = ((hour + 1) % 24).toString().padStart(2, "0");
+  return `${start}:00 - ${end}:00`;
+}
+
 // insight functions
 
 function getMessageCountPerPerson(messages) {
@@ -277,6 +283,136 @@ function getLongestInactivePeriod(messages) {
   };
 }
 
+function getDayVsNightCounts(messages, dayStartHour = 6, nightStartHour = 18) {
+  let dayCount = 0;
+  let nightCount = 0;
+
+  for (const msg of messages) {
+    const hour = new Date(msg.timestamp).getHours();
+
+    if (hour >= dayStartHour && hour < nightStartHour) {
+      dayCount++;
+    } else {
+      nightCount++;
+    }
+  }
+
+  return {
+    day: dayCount,
+    night: nightCount,
+  };
+}
+function getDayVsNightRatio(messages) {
+  const { day, night } = getDayVsNightCounts(messages);
+  const total = day + night;
+
+  if (total === 0) {
+    return { day: 0, night: 0 };
+  }
+
+  return {
+    day: (day / total) * 100,
+    night: (night / total) * 100,
+  };
+}
+
+function getLongestMonologue(messages, minHours = 3) {
+  if (messages.length === 0) return null;
+
+  const sorted = sortMessagesByTime(messages);
+  const minDurationMs = minHours * 60 * 60 * 1000;
+
+  let longest = null;
+
+  let currentSender = sorted[0].sender;
+  let startTime = new Date(sorted[0].timestamp);
+  let lastTime = startTime;
+  let count = 1;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const msg = sorted[i];
+    const msgTime = new Date(msg.timestamp);
+
+    if (msg.sender === currentSender) {
+      // continue monologue
+      lastTime = msgTime;
+      count++;
+    } else {
+      // sender changed → evaluate previous monologue
+      const duration = lastTime - startTime;
+
+      if (duration >= minDurationMs) {
+        if (!longest || duration > longest.durationMs) {
+          longest = {
+            sender: currentSender,
+            from: startTime,
+            to: lastTime,
+            durationMs: duration,
+            messageCount: count,
+          };
+        }
+      }
+
+      // reset for new sender
+      currentSender = msg.sender;
+      startTime = msgTime;
+      lastTime = msgTime;
+      count = 1;
+    }
+  }
+
+  // final monologue check
+  const finalDuration = lastTime - startTime;
+  if (finalDuration >= minDurationMs) {
+    if (!longest || finalDuration > longest.durationMs) {
+      longest = {
+        sender: currentSender,
+        from: startTime,
+        to: lastTime,
+        durationMs: finalDuration,
+        messageCount: count,
+      };
+    }
+  }
+
+  return longest;
+}
+
+function getActivityByHour(messages) {
+  const buckets = {};
+
+  for (const msg of messages) {
+    const hour = new Date(msg.timestamp).getHours();
+    const label = getHourBucketLabel(hour);
+
+    buckets[label] = (buckets[label] || 0) + 1;
+  }
+
+  return buckets;
+}
+
+function getMostActiveTimePeriod(messages) {
+  const buckets = getActivityByHour(messages);
+
+  let maxCount = 0;
+  let mostActivePeriod = null;
+
+  for (const period in buckets) {
+    if (buckets[period] > maxCount) {
+      maxCount = buckets[period];
+      mostActivePeriod = period;
+    }
+  }
+
+  return {
+    period: mostActivePeriod,
+    messageCount: maxCount,
+    distribution: buckets,
+  };
+}
+
+//async
+
 async function calculateMessageCounts() {
   await openDB();
   const messages = await getAllMessages();
@@ -298,6 +434,12 @@ async function calculateAverageResponseTime() {
   await openDB();
   const messages = await getAllMessages();
   return getAverageResponseTimePerPerson(messages);
+}
+
+async function calculateDayVsNightRatio() {
+  await openDB();
+  const messages = await getAllMessages();
+  return getDayVsNightRatio(messages);
 }
 
 async function showAverageResponseTime() {
@@ -335,6 +477,65 @@ async function calculateLongestInactivePeriod() {
   return getLongestInactivePeriod(messages);
 }
 
+async function showDayVsNightRatio() {
+  const ratio = await calculateDayVsNightRatio();
+
+  const output =
+    `\n\nDay vs Night Texting Ratio:\n\n` +
+    `Day: ${ratio.day.toFixed(1)}%\n` +
+    `Night: ${ratio.night.toFixed(1)}%`;
+
+  document.getElementById("status").textContent += output;
+}
+
+async function calculateLongestMonologue() {
+  await openDB();
+  const messages = await getAllMessages();
+  return getLongestMonologue(messages);
+}
+
+async function showLongestMonologue() {
+  const result = await calculateLongestMonologue();
+
+  if (!result) {
+    document.getElementById("status").textContent =
+      "No monologue longer than 3 hours found.";
+    return;
+  }
+
+  const output =
+    `\n\nLongest Monologue:\n\n` +
+    `Sender: ${result.sender}\n` +
+    `From: ${formatDateTime(result.from)}\n` +
+    `To:   ${formatDateTime(result.to)}\n` +
+    `Duration: ${formatDuration(result.durationMs)}\n` +
+    `Messages sent: ${result.messageCount}`;
+
+  document.getElementById("status").textContent += output;
+}
+
+async function calculateMostActiveTimePeriod() {
+  await openDB();
+  const messages = await getAllMessages();
+  return getMostActiveTimePeriod(messages);
+}
+
+async function showMostActiveTimePeriod() {
+  const result = await calculateMostActiveTimePeriod();
+
+  if (!result.period) {
+    document.getElementById("status").textContent = "No messages found.";
+    return;
+  }
+
+  const output =
+    `\n\nMost Active Time Period:\n\n` +
+    `Time: ${result.period}\n` +
+    `Messages: ${result.messageCount}`;
+
+  document.getElementById("status").textContent += output;
+}
+
 document.getElementById("fileInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -350,6 +551,9 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
   showMessageCounts();
   showAverageResponseTime();
   showLongestInactivePeriod();
+  showDayVsNightRatio();
+  showLongestMonologue();
+  showMostActiveTimePeriod();
 });
 
 document
