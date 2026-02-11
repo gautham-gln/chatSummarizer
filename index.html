@@ -11,8 +11,46 @@
     <input type="file" id="fileInput" accept=".txt" />
     <button id="deleteDbBtn">Delete Stored Data</button>
 
-    <pre id="status"></pre>
-    <div id="heatmap-container"></div>
+    <div class="parent">
+      <div class="div1">
+        <h2>Number of Messages</h2>
+        <pre id="messages"></pre>
+      </div>
+      <div class="div2">
+        <h2>Average Response Time</h2>
+        <pre id="avg-rt"></pre>
+      </div>
+      <div class="div3">
+        <h2>Longest inactive period</h2>
+        <pre id="longest-inactive"></pre>
+      </div>
+      <div class="div4">
+        <h2>Day vs Night Texting Ratio</h2>
+        <pre id="day-night"></pre>
+      </div>
+      <div class="div5">
+        <h2>Most Active Period</h2>
+        <pre id="most-active"></pre>
+      </div>
+      <div class="div6">
+        <h2>Highest Used Emoji</h2>
+        <pre id="emoji"></pre>
+      </div>
+      <div class="div7">
+        <h2>Longest Streak</h2>
+        <pre id="l-streak"></pre>
+      </div>
+      <div class="div8">
+        <h2>Current Streak</h2>
+        <pre id="c-streak"></pre>
+      </div>
+    </div>
+    <div class="div9">
+      <h2>Message Activity Heatmap</h2>
+      <div id="heatmap-container"></div>
+    </div>
+
+    <!-- <div id="heatmap-container"></div> -->
 
     <script src="app.js"></script>
   </body>

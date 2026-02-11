@@ -83,12 +83,13 @@ function createEmptyHeatmap() {
 }
 
 function getHeatmapColor(value, max) {
-  if (value === 0) return "#f2f2f2";
+  if (value === 0) return "rgb(242, 242, 242)";
 
   const intensity = value / max; // 0 → 1
   const alpha = Math.min(0.85, intensity);
-
-  return `rgba(33, 150, 243, ${alpha})`; // blue scale
+  //return "rgb(175, 131, 238)";
+  //return `rgba(55, 170, 157, ${alpha})`; // blue scale
+  return `rgba(131, 238, 206, ${alpha})`;
 }
 
 function renderHeatmap(heatmap, containerId = "heatmap-container") {
@@ -680,7 +681,7 @@ async function showMessageCounts() {
     output += `${person}: ${counts[person]}\n`;
   }
 
-  document.getElementById("status").textContent += output;
+  document.getElementById("messages").textContent += output;
 }
 
 async function calculateAverageResponseTime() {
@@ -698,30 +699,29 @@ async function calculateDayVsNightRatio() {
 async function showAverageResponseTime() {
   const averages = await calculateAverageResponseTime();
 
-  let output = "Average response time:\n\n";
+  let output = "";
   for (const person in averages) {
     output += `${person}: ${formatDuration(averages[person])}\n`;
   }
 
-  document.getElementById("status").textContent += output;
+  document.getElementById("avg-rt").textContent += output;
 }
 
 async function showLongestInactivePeriod() {
   const result = await calculateLongestInactivePeriod();
 
   if (!result) {
-    document.getElementById("status").textContent =
+    document.getElementById("longest-inactive").textContent =
       "Not enough messages to calculate inactivity.";
     return;
   }
 
   const output =
-    `Longest inactive period:\n\n` +
     `From: ${formatDateTime(result.from)}\n` +
     `To:   ${formatDateTime(result.to)}\n` +
     `Duration: ${formatDuration(result.durationMs)}`;
 
-  document.getElementById("status").textContent += output;
+  document.getElementById("longest-inactive").textContent += output;
 }
 
 async function calculateLongestInactivePeriod() {
@@ -734,11 +734,9 @@ async function showDayVsNightRatio() {
   const ratio = await calculateDayVsNightRatio();
 
   const output =
-    `\n\nDay vs Night Texting Ratio:\n\n` +
-    `Day: ${ratio.day.toFixed(1)}%\n` +
-    `Night: ${ratio.night.toFixed(1)}%`;
+    `Day: ${ratio.day.toFixed(1)}%\n` + `Night: ${ratio.night.toFixed(1)}%`;
 
-  document.getElementById("status").textContent += output;
+  document.getElementById("day-night").textContent += output;
 }
 
 async function calculateLongestMonologue() {
@@ -777,16 +775,14 @@ async function showMostActiveTimePeriod() {
   const result = await calculateMostActiveTimePeriod();
 
   if (!result.period) {
-    document.getElementById("status").textContent = "No messages found.";
+    document.getElementById("most-active").textContent = "No messages found.";
     return;
   }
 
   const output =
-    `\n\nMost Active Time Period:\n\n` +
-    `Time: ${result.period}\n` +
-    `Messages: ${result.messageCount}`;
+    `Time: ${result.period}\n` + `Messages: ${result.messageCount}`;
 
-  document.getElementById("status").textContent += output;
+  document.getElementById("most-active").textContent += output;
 }
 
 async function calculateMostUsedEmojiPerPerson() {
@@ -798,14 +794,14 @@ async function calculateMostUsedEmojiPerPerson() {
 async function showMostUsedEmojiPerPerson() {
   const result = await calculateMostUsedEmojiPerPerson();
 
-  let output = "\n\nMost Used Emoji Per Person:\n\n";
+  let output = "";
 
   for (const person in result) {
     const { emoji, count } = result[person];
     output += `${person}: ${emoji || "None"} (${count || 0})\n`;
   }
 
-  document.getElementById("status").textContent += output;
+  document.getElementById("emoji").textContent += output;
 }
 
 function getLongestMessageStreak(messages) {
@@ -857,10 +853,10 @@ function getLongestMessageStreak(messages) {
 function showLongestStreak(messages) {
   const res = getLongestMessageStreak(messages);
 
-  let op = "\n\nLongest Streak:\n\n";
+  let op = "";
   op += `${res.length} days (${res.start} → ${res.end})`;
 
-  const status = document.getElementById("status");
+  const status = document.getElementById("l-streak");
   status.textContent += op;
 
   console.log(op);
@@ -869,11 +865,8 @@ function showLongestStreak(messages) {
 function showCurrentStreak(messages) {
   const res = getCurrentMessageStreak(messages);
 
-  const status = document.getElementById("status");
-  status.textContent += `
-
-Current Streak:
-${res.length} days (${res.from} → ${res.to})
+  const status = document.getElementById("c-streak");
+  status.textContent += `${res.length} days (${res.from} → ${res.to})
 `;
 }
 
@@ -893,7 +886,7 @@ document.getElementById("fileInput").addEventListener("change", async (e) => {
   showAverageResponseTime();
   showLongestInactivePeriod();
   showDayVsNightRatio();
-  showLongestMonologue();
+  //showLongestMonologue();
   showMostActiveTimePeriod();
   await showMostUsedEmojiPerPerson();
   showLongestStreak(messages);

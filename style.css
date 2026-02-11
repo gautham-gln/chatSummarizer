@@ -1,3 +1,9 @@
+* {
+  /*background-color: #3a506b;*/
+  /* background-color: rgb(131, 208, 206); */
+  background-color: black;
+  color: white;
+}
 body {
   font-family: Arial, sans-serif;
   padding: 20px;
@@ -17,6 +23,7 @@ pre {
 #heatmap-container {
   overflow-x: auto;
   margin-top: 20px;
+  text-align: center;
 }
 
 .heatmap-grid {
@@ -37,9 +44,38 @@ pre {
   font-weight: bold;
   text-align: right;
   padding-right: 6px;
+  color: black;
 }
 
 .heatmap-hour {
   font-weight: bold;
   background: #ddd;
+  color: black;
+}
+
+.parent {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  border: 2px solid black;
+  padding: 5px;
+}
+/* 
+.div7 {
+  grid-column: span 2 / span 2;
+  border: 2px solid black;
+  padding: 2px;
+} */
+
+.div9 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+pre {
+  background-color: #0b132b;
+  color: white;
 }
