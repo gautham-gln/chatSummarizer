@@ -83,13 +83,13 @@ function createEmptyHeatmap() {
 }
 
 function getHeatmapColor(value, max) {
-  if (value === 0) return "rgb(242, 242, 242)";
+  if (value === 0) return "";
 
-  const intensity = value / max; // 0 → 1
-  const alpha = Math.min(0.85, intensity);
-  //return "rgb(175, 131, 238)";
-  //return `rgba(55, 170, 157, ${alpha})`; // blue scale
-  return `rgba(131, 238, 206, ${alpha})`;
+  const intensity = value / max;
+
+  // green scale
+  const lightness = 90 - intensity * 50;
+  return `hsl(140, 60%, ${lightness}%)`;
 }
 
 function renderHeatmap(heatmap, containerId = "heatmap-container") {
@@ -106,18 +106,21 @@ function renderHeatmap(heatmap, containerId = "heatmap-container") {
   const grid = document.createElement("div");
   grid.className = "heatmap-grid";
 
+  // Top-left empty corner
   grid.appendChild(document.createElement("div"));
 
+  // Hour headers
   for (let h = 0; h < 24; h++) {
     const hourCell = document.createElement("div");
-    hourCell.className = "heatmap-cell heatmap-hour";
+    hourCell.className = "heatmap-hour";
     hourCell.textContent = h;
     grid.appendChild(hourCell);
   }
 
+  // Days
   for (const day of Object.keys(heatmap)) {
     const dayCell = document.createElement("div");
-    dayCell.className = "heatmap-cell heatmap-day";
+    dayCell.className = "heatmap-day";
     dayCell.textContent = day;
     grid.appendChild(dayCell);
 
@@ -125,10 +128,17 @@ function renderHeatmap(heatmap, containerId = "heatmap-container") {
       const value = heatmap[day][h];
 
       const cell = document.createElement("div");
-      cell.className = "heatmap-cell";
-      cell.textContent = value > 0 ? value : "";
 
-      cell.style.backgroundColor = getHeatmapColor(value, max);
+      const style = getHeatmapStyle(value, max);
+
+      cell.className = "heatmap-cell " + style.className;
+
+      if (style.bg) {
+        cell.style.backgroundColor = style.bg;
+        cell.style.color = style.text;
+      }
+
+      cell.textContent = value > 0 ? value : "";
       cell.title = `${day}, ${h}:00 → ${value} messages`;
 
       grid.appendChild(cell);
@@ -136,6 +146,31 @@ function renderHeatmap(heatmap, containerId = "heatmap-container") {
   }
 
   container.appendChild(grid);
+}
+
+function getHeatmapStyle(value, max) {
+  if (value === 0) {
+    return {
+      bg: "",
+      text: "",
+      className: "zero",
+    };
+  }
+
+  const intensity = value / max;
+
+  // WhatsApp green scale (safe range)
+  const lightness = 85 - intensity * 45;
+  const bg = `hsl(142, 70%, ${lightness}%)`;
+
+  // Auto contrast logic
+  const text = intensity > 0.55 ? "#ffffff" : "#0f2e1c";
+
+  return {
+    bg,
+    text,
+    className: "",
+  };
 }
 
 function toDateKey(date) {
